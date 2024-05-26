@@ -18,6 +18,11 @@ from timm.data.transforms import _pil_interp
 from .cached_image_folder import CachedImageFolder
 from .samplers import SubsetRandomSampler
 from .dataset_fg import DatasetMeta
+from .dataset_fishair import FishAirDatasetProcessed
+from .data_setup_fish import get_transform as get_transform_fish
+from .data_setup_fish import get_species_id_dict_for_classification
+
+
 def build_loader(config):
     config.defrost()
     dataset_train, config.MODEL.NUM_CLASSES = build_dataset(is_train=True, config=config)
@@ -123,6 +128,23 @@ def build_dataset(is_train, config):
         root = './datasets/aircraft'
         dataset = DatasetMeta(root=root,transform=transform,train=is_train,aux_info=config.DATA.ADD_META,dataset=config.DATA.DATASET)
         nb_classes = 100
+    elif config.DATA.DATASET == 'fishair_processed':
+        root = '/data/BGRemovedCropped/all'
+        if is_train:
+            data_file = os.path.join(config.DATA.DATA_PATH, 'imb_classification_train_final_filtered.csv')
+        else:
+            data_file = os.path.join(config.DATA.DATA_PATH, 'imb_classification_test_final_filtered.csv')
+
+        species_id_dict = get_species_id_dict_for_classification(data_file, 'standardized_species')
+        transform = get_transform_fish(target_size=224, mean=torch.tensor([0.8159, 0.7978, 0.7721]), \
+                                    std=torch.tensor([0.3316, 0.3474, 0.3740]), transform_type='squarepad_augment_normalize')
+        dataset = FishAirDatasetProcessed(data_file=data_file, img_dir=root, transform=transform,
+                                            species_column_name='standardized_species', species_id_dict=species_id_dict)
+        nb_classes = 419
+
+        sp_id_filename = 'species_id_dict.json'
+        with open(os.path.join(config.OUTPUT, sp_id_filename), 'w') as f: # NOTE: To be updated LOGDIR
+            json.dump(species_id_dict, f)
     else:
         raise NotImplementedError("We only support ImageNet and inaturelist.")
 
